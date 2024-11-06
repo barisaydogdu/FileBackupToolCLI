@@ -10,12 +10,25 @@ import (
 )
 
 func BackupFilewithPeriod(source, destination string, period int64) error {
-	err := BackupFile(source, destination)
-	if err != nil {
-		return err
-		fmt.Errorf("There is something wrong with backupfile %v", err)
-	}
-	time.Sleep(time.Duration(period))
+	ticker := time.NewTicker(time.Duration(period))
+	done := make(chan bool)
+
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				err := BackupFile(source, destination)
+				if err != nil {
+					fmt.Errorf("there is something wrong with backupfile %v", err)
+					return
+				}
+			}
+		}
+	}()
+	defer ticker.Stop()
+	done <- true
 	return nil
 }
 
@@ -70,5 +83,9 @@ func GetModeTime(path string) time.Time {
 	modificationTime := info.ModTime()
 
 	return modificationTime
+
+}
+
+func SleepwithSecond() {
 
 }

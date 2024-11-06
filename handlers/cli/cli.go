@@ -15,7 +15,7 @@ var (
 
 	rootCmd = &cobra.Command{
 		Use:   "filecopy",
-		Short: "A tool to copy files from source to target at a specified frequency",
+		Short: "A tool to copy files from source to target at a specified period",
 		Long: `This application copies a file from a source path to a target path at regular intervals.
 You can specify the source file, target file, and the frequency (in seconds) for the copy operation.`,
 	}
