@@ -1,7 +1,9 @@
 package file
 
 import (
+	"context"
 	"fmt"
+	"github.com/spf13/cobra"
 	"io"
 	"io/fs"
 	"os"
@@ -9,30 +11,39 @@ import (
 	"time"
 )
 
-func BackupFilewithPeriod(source, destination string, period int64) error {
-	ticker := time.NewTicker(time.Duration(period))
-	done := make(chan bool)
+type File struct {
+	ctx context.Context
+	cmd *cobra.Command
+}
+
+func NewFile(ctx context.Context, cmd *cobra.Command) *File {
+	return &File{ctx: ctx, cmd: cmd}
+}
+
+func (f *File) BackupFileWithPeriod(source, destination string, period int64) error {
+	ticker := time.NewTicker(time.Second * time.Duration(period))
 
 	go func() {
 		for {
 			select {
-			case <-done:
+			case <-f.ctx.Done():
+				ticker.Stop()
+				f.cmd.Println("file backup stopped")
 				return
 			case <-ticker.C:
-				err := BackupFile(source, destination)
-				if err != nil {
-					fmt.Errorf("there is something wrong with backupfile %v", err)
+				if err := f.BackupFile(source, destination); err != nil {
+					f.cmd.PrintErr(err)
 					return
 				}
 			}
 		}
 	}()
-	defer ticker.Stop()
-	done <- true
+
 	return nil
 }
 
-func BackupFile(source, destination string) error {
+func (f *File) BackupFile(source, destination string) error {
+	f.cmd.Println("backing up file", source, destination)
 	return filepath.Walk(source, func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -49,14 +60,21 @@ func BackupFile(source, destination string) error {
 			}
 			return nil
 		}
-		if os.Stat(destPath); os.IsNotExist(err) || info.ModTime().After(GetModeTime(destPath)) {
-			return CopyFile(path, destPath)
+		mt, err := f.GetModeTime(destPath)
+		if err != nil {
+			return err
 		}
+
+		_, err2 := os.Stat(destPath)
+		if os.IsNotExist(err2) || info.ModTime().After(*mt) {
+			return f.CopyFile(path, destPath)
+		}
+
 		return nil
 	})
 }
 
-func CopyFile(sourceFile, targetFile string) error {
+func (f *File) CopyFile(sourceFile, targetFile string) error {
 	input, err := os.Open(sourceFile)
 	if err != nil {
 		return err
@@ -73,19 +91,16 @@ func CopyFile(sourceFile, targetFile string) error {
 	return err
 }
 
-func GetModeTime(path string) time.Time {
+func (f *File) GetModeTime(path string) (*time.Time, error) {
 	info, err := os.Stat(path)
-	if err != nil {
-		fmt.Errorf("There is something error with get file info : %v", err)
-		return time.Time{}
+	if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("there is something error with get file info : %v", err)
+	} else if err != nil && os.IsNotExist(err) {
+		return &time.Time{}, nil
 	}
 
 	modificationTime := info.ModTime()
 
-	return modificationTime
-
-}
-
-func SleepwithSecond() {
+	return &modificationTime, nil
 
 }
